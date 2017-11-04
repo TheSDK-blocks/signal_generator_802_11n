@@ -1,5 +1,5 @@
 # signal_generator_802_11n class 
-# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 03.11.2017 10:56
+# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 03.11.2017 17:57
 import sys
 sys.path.append ('/home/projects/fader/TheSDK/Entities/refptr/py')
 sys.path.append ('/home/projects/fader/TheSDK/Entities/thesdk/py')
@@ -33,6 +33,8 @@ PLPCsyn_short=np.sqrt(13/6)*np.array([0,0,0,0,0,0,0,0,1+1j,0,0,0,-1-1j,0,0,0,1+1
 PLPCsyn_long=np.array([0,0,0,0,0,0,1,1,-1,-1,1,1,-1,1,-1,1,1,1,1,1,1,-1,-1,1,1,-1,1,-1,1,1,1,1,0,1,-1,-1,1,1,-1,1,-1,1,-1,-1,-1,-1,-1,1,1,-1,-1,1,-1,1,-1,1,1,1,1,0,0,0,0,0],ndmin=2).T
 #Convert to "Math" IFFT/FTT format: to_fft=symbol_in_802_standard_format[Freqmap], maps the negative frequencies to the upper half
 
+TGI2=int(1.6e-6*20e6) #Guard interval for training symbols
+
 #These are identical, lower works only in python
 #Freqmap=np.r_[np.arange(32,64), np.arange(0,32)] #Maps negative frequencies to the end of the array
 Freqmap=np.r_[np.arange(-32,0), np.arange(0,32)] #Maps negative frequencies to the end of the array
@@ -43,6 +45,7 @@ bbsigdict_ofdm_sinusoid3={ 'mode':'ofdm_sinusoid', 'freqs':[1.0e6 , 13e6, 17e6 ]
 #-----Data signals
 bbsigdict_randombitstream_QAM4_OFDM={ 'mode':'ofdm_random_qam', 'QAM':4, 'length':2**14, 'BBRs': 20e6 };
 
+bbsigdict_802_11n_random_QAM16_OFDM={ 'mode':'ofdm_random_802_11n', 'QAM':16, 'length':2**14, 'BBRs': 20e6 };
 
 class signal_generator_802_11n(thesdk):
 
@@ -50,7 +53,7 @@ class signal_generator_802_11n(thesdk):
     def __init__(self,*arg): 
         self.proplist = [ 'Rs', 'bbsigdict', 'Txantennas', 'Users'];    #properties that can be propagated from parent
         self.ofdmdict =ofdm64dict_withguardband
-        self.bbsigdict=bbsigdict_randombitstream_QAM4_OFDM
+        self.bbsigdict=bbsigdict_802_11n_random_QAM16_OFDM
         self.Rs = self.bbsigdict['BBRs']         # Default system sampling frequency
         self.Users=2
         self.Txantennas=4
@@ -58,7 +61,8 @@ class signal_generator_802_11n(thesdk):
         self.model='py';                         #can be set externally, but is not propagated
         self._Z = refptr();
         self._classfile=__file__
-        self.DEBUG= True
+        self.DEBUG= False
+        self.gen_plpc_preamble_field()
 
         if len(arg)>=1:
             parent=arg[0]
@@ -117,7 +121,54 @@ class signal_generator_802_11n(thesdk):
             out[i,:,:]=usersig
 
         self._Z.Value=out 
-    
+    def gen_random_802_11n_ofdm(self):
+            #Local vars just to clear to code
+            ofdmdict=self.ofdmdict
+            bbsigdict=self.bbsigdict
+            framelen=ofdmdict['framelen']
+            length=bbsigdict['length']
+            CPlen=ofdmdict['CPlen']
+            QAM=bbsigdict['QAM']
+            BBRs=bbsigdict['BBRs']
+            #The length is approx this many frames
+            frames=np.floor(length/(framelen+CPlen))
+            bitspersymbol=np.log2(QAM).astype(int)
+            
+            #Generate random bitstreams per user
+            #bitstream(user,time,antenna)
+            bitstream=np.random.randint(2,size=(self.Users,int(frames*bitspersymbol*framelen)))
+
+            #Init the qam signal, frame and out
+            #qamsignal is different for the users, but initially identical for the TXantennas 
+            qamsignal=np.zeros((self.Users,int(frames*framelen)),dtype='complex')
+            frame=np.zeros((int(frames),int(framelen)),dtype='complex')
+
+            #for i in range(self.Txantennas):
+            win=np.r_[0.5, np.ones((framelen-2+CPlen)), 0.5]
+            for i in range(self.Users):
+                wordstream, qamsignal[i]= mdm.qamModulateBitStream(bitstream[i], QAM) #Modulated signal per user
+                qamsignal[i]=qamsignal[i].reshape((1,qamsignal.shape[1]))
+                frame= qamsignal[i].reshape((-1,framelen)) #The OFDM frames
+                dataframe=frame[:,ofdmdict['data_loc']+32]   #Set the data
+                pilotframe=frame[:,ofdmdict['pilot_loc']+32] #In this case, also pilot carry bits
+                modulated=mdm.ofdmMod(ofdmdict,dataframe,pilotframe) #Modulated data
+                modulated=modulated.reshape((-1,(framelen+CPlen)))
+                modulated=modulated*win
+                modulated=modulated.reshape(-1,1)
+                #Concatenate withsample overlap after the preamble
+                a=np.r_['0',self.PLPCseq, np.zeros((modulated.shape[0]-1,1))] 
+                b=np.r_['0', np.zeros((self.PLPCseq.shape[0]-1,1)), modulated]
+                modulated=a+b
+                
+                #Replicate the user data to all antennas
+                if i==0:
+                    usersig=np.zeros((self.Users, modulated.shape[0], self.Txantennas),dtype='complex')
+                    usersig[i,:,:]=np.transpose(np.ones((self.Txantennas,1))@modulated.T)
+                else:
+                    usersig[i,:,:]=np.transpose(np.ones((self.Txantennas,1))@modulated.T)
+            self._Z.Value=usersig 
+            return usersig
+          
     def ofdm_random_qam(self):
             #Local vars just to clear to code
             ofdmdict=self.ofdmdict
@@ -180,27 +231,10 @@ class signal_generator_802_11n(thesdk):
                     usersig[i,:,:]=np.transpose(np.ones((self.Txantennas,1))@chained)
                 else:
                     usersig[i,:,:]=np.transpose(np.ones((self.Txantennas,1))@chained)
-                
             self._Z.Value=usersig 
+            return usersig
     
     def gen_plpc_preamble_field(self):
-        #Need to generate the IFFT according to stardard
-        #t=np.arange(64)
-        #t.shape=(-1,1)
-        #k=np.arange(-32,32)
-        #k.shape=(-1,1)
-        #IFFTmat=1/64*np.exp(2j*np.pi*t@k.T/64)
-        #seq_short=IFFTmat@PLPCsyn_short
-        
-        #Equivalent method using the zero  indexing FFT
-        #Python sucks. Be careful with dimensions
-        #shift=-32  #Negative frequency shift by Fs/2
-        #fshift=np.r_[PLPCsyn_short[shift::], PLPCsyn_short[0:shift]]
-        #print(Freqmap)
-        #fshift=PLPCsyn_short[Freqmap]
-        #seq_short2=np.fft.ifft(PLPCsyn_short[Freqmap2],axis=0)
-        #print(seq_short-seq_short2)
-
         #Sequence in time domain
         seq_short=np.fft.ifft(PLPCsyn_short[Freqmap],axis=0)
         #extend to 161 samples
@@ -215,20 +249,22 @@ class signal_generator_802_11n(thesdk):
         #print(np.fft.fft(seq_short,axis=0))
 
         ##Generate long sequence
+        #shift the fregs by TGI
+
         seq_long=np.fft.ifft(PLPCsyn_long[Freqmap],axis=0)
         seq_long_extended=np.array([], ndmin=2,dtype='complex')
-        print(seq_long)
+        #print(seq_long)
         for i in range(4):
             seq_long_extended=np.r_['1', seq_long_extended, seq_long.T]
 
-        print(seq_long_extended)
+        seq_long_extended=np.r_['1', seq_long[-TGI2::].T, seq_long_extended]
         self.PLPCseq_long=seq_long_extended[0,0:161]*win
         self.PLPCseq_long.shape=(-1,1)
 
         a=np.r_['0',self.PLPCseq_short, np.zeros((self.PLPCseq_long.shape[0]-1,1))] 
         b=np.r_['0', np.zeros((self.PLPCseq_short.shape[0]-1,1)), self.PLPCseq_long]
         self.PLPCseq=a+b 
-        print(self.PLPCseq)
+        print(self.PLPCseq.shape)
  
     def gen_plcp_header_field(self):
         pass
@@ -306,5 +342,6 @@ if __name__=="__main__":
     from signal_generator_802_11n import *
     t=signal_generator_802_11n()
     t.gen_plpc_preamble_field()
-
+    t.gen_random_802_11n_ofdm()
+    print(t._Z.Value.shape)
 
