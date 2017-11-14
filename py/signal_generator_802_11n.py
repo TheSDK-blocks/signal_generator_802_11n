@@ -1,5 +1,5 @@
 # signal_generator_802_11n class 
-# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 03.11.2017 17:57
+# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 13.11.2017 17:18
 import sys
 sys.path.append ('/home/projects/fader/TheSDK/Entities/refptr/py')
 sys.path.append ('/home/projects/fader/TheSDK/Entities/thesdk/py')
@@ -62,6 +62,10 @@ class signal_generator_802_11n(thesdk):
         self._Z = refptr();
         self._classfile=__file__
         self.DEBUG= False
+        self.PLPCseq_short=np.array([1],ndmin=2)
+        self.PLPCseq_long=np.array([1],ndmin=2)
+        self.PLPCseq_shortwin=np.array([1],ndmin=2)
+        self.PLPCseq_longwin=np.array([1],ndmin=2)
         self.gen_plpc_preamble_field()
 
         if len(arg)>=1:
@@ -155,9 +159,13 @@ class signal_generator_802_11n(thesdk):
                 modulated=modulated.reshape((-1,(framelen+CPlen)))
                 modulated=modulated*win
                 modulated=modulated.reshape(-1,1)
+                rmsmodulated=np.std(modulated)
+                PLPCscaled=self.PLPCseq/np.std(self.PLPCseq)*rmsmodulated
                 #Concatenate withsample overlap after the preamble
-                a=np.r_['0',self.PLPCseq, np.zeros((modulated.shape[0]-1,1))] 
-                b=np.r_['0', np.zeros((self.PLPCseq.shape[0]-1,1)), modulated]
+                #a=np.r_['0',self.PLPCseq, np.zeros((modulated.shape[0]-1,1))] 
+                #b=np.r_['0', np.zeros((self.PLPCseq.shape[0]-1,1)), modulated]
+                a=np.r_['0',PLPCscaled, np.zeros((modulated.shape[0]-1,1))] 
+                b=np.r_['0', np.zeros((PLPCscaled.shape[0]-1,1)), modulated]
                 modulated=a+b
                 
                 #Replicate the user data to all antennas
@@ -244,8 +252,10 @@ class signal_generator_802_11n(thesdk):
 
         ##windowing
         win=np.r_[0.5, np.ones((159)), 0.5]
-        self.PLPCseq_short=seq_short_extended[0,0:161]*win
+        self.PLPCseq_short=seq_short_extended[0,0:161]
+        self.PLPCseq_shortwin=seq_short_extended[0,0:161]*win
         self.PLPCseq_short.shape=(-1,1)
+        self.PLPCseq_shortwin.shape=(-1,1)
         #print(np.fft.fft(seq_short,axis=0))
 
         ##Generate long sequence
@@ -258,11 +268,13 @@ class signal_generator_802_11n(thesdk):
             seq_long_extended=np.r_['1', seq_long_extended, seq_long.T]
 
         seq_long_extended=np.r_['1', seq_long[-TGI2::].T, seq_long_extended]
-        self.PLPCseq_long=seq_long_extended[0,0:161]*win
+        self.PLPCseq_long=seq_long_extended[0,0:16]
+        self.PLPCseq_longwin=seq_long_extended[0,0:161]*win
         self.PLPCseq_long.shape=(-1,1)
+        self.PLPCseq_longwin.shape=(-1,1)
 
-        a=np.r_['0',self.PLPCseq_short, np.zeros((self.PLPCseq_long.shape[0]-1,1))] 
-        b=np.r_['0', np.zeros((self.PLPCseq_short.shape[0]-1,1)), self.PLPCseq_long]
+        a=np.r_['0',self.PLPCseq_shortwin, np.zeros((self.PLPCseq_longwin.shape[0]-1,1))] 
+        b=np.r_['0', np.zeros((self.PLPCseq_shortwin.shape[0]-1,1)), self.PLPCseq_longwin]
         self.PLPCseq=a+b 
         print(self.PLPCseq.shape)
  
