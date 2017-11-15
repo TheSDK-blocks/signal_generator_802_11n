@@ -268,7 +268,10 @@ class signal_generator_802_11n(thesdk):
             seq_long_extended=np.r_['1', seq_long_extended, seq_long.T]
 
         seq_long_extended=np.r_['1', seq_long[-TGI2::].T, seq_long_extended]
-        self.PLPCseq_long=seq_long_extended[0,0:16]
+        self.PLPCseq_long=seq_long_extended[0,0:161]
+        print(self.PLPCseq_long)
+        msg="Long sequence is \n %s" %(self.PLPCseq_long)
+        self.print_log({'type':'I', 'msg': msg}) 
         self.PLPCseq_longwin=seq_long_extended[0,0:161]*win
         self.PLPCseq_long.shape=(-1,1)
         self.PLPCseq_longwin.shape=(-1,1)
