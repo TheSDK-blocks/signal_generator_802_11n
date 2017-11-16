@@ -1,5 +1,5 @@
 # signal_generator_802_11n class 
-# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 15.11.2017 22:22
+# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 16.11.2017 14:59
 import sys
 sys.path.append ('/home/projects/fader/TheSDK/Entities/refptr/py')
 sys.path.append ('/home/projects/fader/TheSDK/Entities/thesdk/py')
@@ -89,16 +89,11 @@ class signal_generator_802_11n(thesdk):
         
         #This defines locations as in 802 standard index 0 equals frequency -32=-fs/2
         signalfrequencies=np.round(np.array(self.bbsigdict['freqs'])/(BBRs/2)*framelen/2).astype(int)
-        print(signalfrequencies)
         frame=np.zeros((frames,framelen))
         frame[:,signalfrequencies+32]=1
-        print(frame[0,:])
         #Need to map onece in order to get remapped right during modulation
         datastream=frame[:,ofdmdict['data_loc']+32]
         pilotstream=frame[:,ofdmdict['pilot_loc']+32]
-        
-        print(datastream[0,:])
-        print(pilotstream[0,:])
 
         #Modulator takes care of mapping the negative frequencises to the end of the array
         interpolated=mdm.ofdmMod(ofdmdict,datastream,pilotstream)
@@ -152,26 +147,40 @@ class signal_generator_802_11n(thesdk):
             frame=np.zeros((int(frames),int(framelen)),dtype='complex')
 
             #for i in range(self.Txantennas):
-            win=np.r_[0.5, np.ones((framelen-2+CPlen)), 0.5]
             for i in range(self.Users):
                 wordstream, qamsignal[i]= mdm.qamModulateBitStream(bitstream[i], QAM) #Modulated signal per user
                 qamsignal[i]=qamsignal[i].reshape((1,qamsignal.shape[1]))
                 frame[:,data_and_pilot_loc+32]= qamsignal[i].reshape((-1,len(data_and_pilot_loc))) #The OFDM frames
-                #frame[:,33]= 1+1j
-                #frame[:,35]= 1-1j
-                #qamsignal[i]=frame[:,data_and_pilot_loc+32].reshape((1,-1))
                 dataframe=frame[:,ofdmdict['data_loc']+32]   #Set the data
                 pilotframe=frame[:,ofdmdict['pilot_loc']+32] #In this case, also pilot carry bits
 
                 modulated=mdm.ofdmMod(ofdmdict,dataframe,pilotframe) #Modulated data
                 modulated=modulated.reshape((-1,(framelen+CPlen)))
-                modulated=modulated*win
+                win=np.ones_like(modulated)
+                win[:,0]=0.5
+                win[:,-1]=0.5
+                print(modulated[0,16:80])
+                test=np.fft.fft(modulated[0,16:80])/64
+                print(test[range(-32,32)])
+                #Windowing breaks the EVM!!!!
+                #modulated=np.multiply(modulated,win)
+                print(modulated[0,16:80])
+                test=np.fft.fft(modulated[0,16:80])/64
+                print(test[range(-32,32)])
                 modulated=modulated.reshape(-1,1)
+                print(modulated[16:80,0])
+                test=np.fft.fft(modulated[16:80,0])/64
+                print(test[range(-32,32)])
                 rmsmodulated=np.std(modulated)
                 PLPCscaled=self.PLPCseq/np.std(self.PLPCseq)*rmsmodulated
                 #Concatenate withsample overlap after the preamble
+
                 a=np.r_['0',PLPCscaled, np.zeros((modulated.shape[0]-1,1))] 
+                print(a.shape)
+                print(PLPCscaled.shape)
                 b=np.r_['0', np.zeros((PLPCscaled.shape[0]-1,1)), modulated]
+                b=np.r_['0', np.zeros((PLPCscaled.shape[0]-1,1)), modulated]
+                print(b.shape)
                 modulated=a+b
                 
                 #Replicate the user data to all antennas
@@ -182,13 +191,18 @@ class signal_generator_802_11n(thesdk):
                     usersig[i,:,:]=np.transpose(np.ones((self.Txantennas,1))@modulated.T)
             self._Z.Value=usersig 
             self._qam_reference=qamsignal
-            print("Perseperse")
-            test=usersig[0,160+32:180+32,0]
-            test.shape=PLPCscaled[160+32:180+32].shape
-            print(test)
-            print(test/PLPCscaled[160+32:180+32])
+            print("Test")
+            print(frame[0,:])
+            print(modulated[320+16:320+80,0])
             print("fft")
-            test=np.fft.fft(PLPCscaled[160+32:160+32+64],axis=0)
+            test=np.fft.fft(modulated[320+16:320+80,0],axis=0)/64
+            print(test[Freqmap])
+            print("Usersig")
+            print(self._Z.Value[0,320+16:320+80,0])
+            test=self._Z.Value[0,320+16:320+80,0]
+            test.shape=(-1,1)
+            print(test.shape)
+            test=np.fft.fft(test,axis=0)/64
             print(test[Freqmap])
 
             return usersig
