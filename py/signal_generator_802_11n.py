@@ -1,5 +1,5 @@
 # signal_generator_802_11n class 
-# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 14.11.2017 14:22
+# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 15.11.2017 22:22
 import sys
 sys.path.append ('/home/projects/fader/TheSDK/Entities/refptr/py')
 sys.path.append ('/home/projects/fader/TheSDK/Entities/thesdk/py')
@@ -60,6 +60,7 @@ class signal_generator_802_11n(thesdk):
         self.iptr_A = refptr();
         self.model='py';                         #can be set externally, but is not propagated
         self._Z = refptr();
+        self._qam_reference =[]                 #Variable for theoriginal user payoad data
         self._classfile=__file__
         self.DEBUG= False
         self.PLPCseq_short=np.array([1],ndmin=2)
@@ -125,6 +126,8 @@ class signal_generator_802_11n(thesdk):
             out[i,:,:]=usersig
 
         self._Z.Value=out 
+        self._qam_reference=ones((self.Users,1))@frame.reshape((1,-1))
+
     def gen_random_802_11n_ofdm(self):
             #Local vars just to clear to code
             ofdmdict=self.ofdmdict
@@ -134,17 +137,18 @@ class signal_generator_802_11n(thesdk):
             CPlen=ofdmdict['CPlen']
             QAM=bbsigdict['QAM']
             BBRs=bbsigdict['BBRs']
+            data_and_pilot_loc=np.sort(np.r_[ofdmdict['data_loc'],ofdmdict['pilot_loc']])
             #The length is approx this many frames
             frames=np.floor(length/(framelen+CPlen))
             bitspersymbol=np.log2(QAM).astype(int)
             
             #Generate random bitstreams per user
             #bitstream(user,time,antenna)
-            bitstream=np.random.randint(2,size=(self.Users,int(frames*bitspersymbol*framelen)))
+            bitstream=np.random.randint(2,size=(self.Users,int(frames*bitspersymbol*len(data_and_pilot_loc))))
 
             #Init the qam signal, frame and out
             #qamsignal is different for the users, but initially identical for the TXantennas 
-            qamsignal=np.zeros((self.Users,int(frames*framelen)),dtype='complex')
+            qamsignal=np.zeros((self.Users,int(frames*len(data_and_pilot_loc))),dtype='complex')
             frame=np.zeros((int(frames),int(framelen)),dtype='complex')
 
             #for i in range(self.Txantennas):
@@ -152,9 +156,13 @@ class signal_generator_802_11n(thesdk):
             for i in range(self.Users):
                 wordstream, qamsignal[i]= mdm.qamModulateBitStream(bitstream[i], QAM) #Modulated signal per user
                 qamsignal[i]=qamsignal[i].reshape((1,qamsignal.shape[1]))
-                frame= qamsignal[i].reshape((-1,framelen)) #The OFDM frames
+                frame[:,data_and_pilot_loc+32]= qamsignal[i].reshape((-1,len(data_and_pilot_loc))) #The OFDM frames
+                #frame[:,33]= 1+1j
+                #frame[:,35]= 1-1j
+                #qamsignal[i]=frame[:,data_and_pilot_loc+32].reshape((1,-1))
                 dataframe=frame[:,ofdmdict['data_loc']+32]   #Set the data
                 pilotframe=frame[:,ofdmdict['pilot_loc']+32] #In this case, also pilot carry bits
+
                 modulated=mdm.ofdmMod(ofdmdict,dataframe,pilotframe) #Modulated data
                 modulated=modulated.reshape((-1,(framelen+CPlen)))
                 modulated=modulated*win
@@ -162,8 +170,6 @@ class signal_generator_802_11n(thesdk):
                 rmsmodulated=np.std(modulated)
                 PLPCscaled=self.PLPCseq/np.std(self.PLPCseq)*rmsmodulated
                 #Concatenate withsample overlap after the preamble
-                #a=np.r_['0',self.PLPCseq, np.zeros((modulated.shape[0]-1,1))] 
-                #b=np.r_['0', np.zeros((self.PLPCseq.shape[0]-1,1)), modulated]
                 a=np.r_['0',PLPCscaled, np.zeros((modulated.shape[0]-1,1))] 
                 b=np.r_['0', np.zeros((PLPCscaled.shape[0]-1,1)), modulated]
                 modulated=a+b
@@ -175,6 +181,16 @@ class signal_generator_802_11n(thesdk):
                 else:
                     usersig[i,:,:]=np.transpose(np.ones((self.Txantennas,1))@modulated.T)
             self._Z.Value=usersig 
+            self._qam_reference=qamsignal
+            print("Perseperse")
+            test=usersig[0,160+32:180+32,0]
+            test.shape=PLPCscaled[160+32:180+32].shape
+            print(test)
+            print(test/PLPCscaled[160+32:180+32])
+            print("fft")
+            test=np.fft.fft(PLPCscaled[160+32:160+32+64],axis=0)
+            print(test[Freqmap])
+
             return usersig
           
     def ofdm_random_qam(self):
@@ -240,6 +256,7 @@ class signal_generator_802_11n(thesdk):
                 else:
                     usersig[i,:,:]=np.transpose(np.ones((self.Txantennas,1))@chained)
             self._Z.Value=usersig 
+            self._qam_reference=qamsignal
             return usersig
     
     def gen_plpc_preamble_field(self):
@@ -261,16 +278,27 @@ class signal_generator_802_11n(thesdk):
         ##Generate long sequence
         #shift the fregs by TGI
 
+        print(PLPCsyn_long[Freqmap])
         seq_long=np.fft.ifft(PLPCsyn_long[Freqmap],axis=0)
+        print("seq_long")
+        print(seq_long)
+        print("fft seq_long")
+        test=np.fft.fft(seq_long,axis=0)
+        print(test[Freqmap])
+
         seq_long_extended=np.array([], ndmin=2,dtype='complex')
         #print(seq_long)
         for i in range(4):
             seq_long_extended=np.r_['1', seq_long_extended, seq_long.T]
 
+        print(TGI2)
         seq_long_extended=np.r_['1', seq_long[-TGI2::].T, seq_long_extended]
         self.PLPCseq_long=seq_long_extended[0,0:161]
-        print(self.PLPCseq_long)
         msg="Long sequence is \n %s" %(self.PLPCseq_long)
+        print("long test fft")
+        test=np.fft.fft(self.PLPCseq_long[TGI2:TGI2+64])
+        print(test[Freqmap])
+        
         self.print_log({'type':'I', 'msg': msg}) 
         self.PLPCseq_longwin=seq_long_extended[0,0:161]*win
         self.PLPCseq_long.shape=(-1,1)
@@ -279,7 +307,10 @@ class signal_generator_802_11n(thesdk):
         a=np.r_['0',self.PLPCseq_shortwin, np.zeros((self.PLPCseq_longwin.shape[0]-1,1))] 
         b=np.r_['0', np.zeros((self.PLPCseq_shortwin.shape[0]-1,1)), self.PLPCseq_longwin]
         self.PLPCseq=a+b 
-        print(self.PLPCseq.shape)
+        print("long test fft 2")
+        test=np.fft.fft(self.PLPCseq[160+TGI2:160+TGI2+64],axis=0)
+        print(test[Freqmap])
+        #print(self.PLPCseq.shape)
  
     def gen_plcp_header_field(self):
         pass
