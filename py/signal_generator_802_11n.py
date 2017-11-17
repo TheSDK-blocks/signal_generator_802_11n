@@ -1,5 +1,5 @@
 # signal_generator_802_11n class 
-# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 16.11.2017 16:51
+# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 17.11.2017 14:22
 import sys
 sys.path.append ('/home/projects/fader/TheSDK/Entities/refptr/py')
 sys.path.append ('/home/projects/fader/TheSDK/Entities/thesdk/py')
@@ -106,7 +106,6 @@ class signal_generator_802_11n(thesdk):
         interpolated=interpolated*win
         chained=interpolated[0,:]
         for k in range(1,interpolated.shape[0]):
-            #print(np.zeros((int(length-overlap))))
             a=np.r_[chained, np.zeros((int(length-overlap)))]
             b=np.r_[np.zeros((int(chained.shape[0]-overlap))), interpolated[k,:] ]
             a.shape=(1,-1)
@@ -130,8 +129,7 @@ class signal_generator_802_11n(thesdk):
             framelen=ofdmdict['framelen']
             length=bbsigdict['length']
             CPlen=ofdmdict['CPlen']
-            #QAM=bbsigdict['QAM']
-            QAM=4
+            QAM=bbsigdict['QAM']
             BBRs=bbsigdict['BBRs']
             data_and_pilot_loc=np.sort(np.r_[ofdmdict['data_loc'],ofdmdict['pilot_loc']])
             #The length is approx this many frames
@@ -161,28 +159,28 @@ class signal_generator_802_11n(thesdk):
                 win=np.ones_like(modulated)
                 win[:,0]=0.5
                 win[:,-1]=0.5
-                print(modulated[0,16:80])
+                self.print_log({'type':'D', 'msg':modulated[0,16:80]})
                 test=np.fft.fft(modulated[0,16:80])/64
-                print(test[range(-32,32)])
+                self.print_log({'type':'D', 'msg':test[range(-32,32)]})
                 #Windowing breaks the EVM!!!!
                 #modulated=np.multiply(modulated,win)
-                print(modulated[0,16:80])
+                self.print_log({'type':'D', 'msg':modulated[0,16:80]})
                 test=np.fft.fft(modulated[0,16:80])/64
-                print(test[range(-32,32)])
+                self.print_log({'type':'D', 'msg':test[range(-32,32)]})
                 modulated=modulated.reshape(-1,1)
-                print(modulated[16:80,0])
+                self.print_log({'type':'D', 'msg':modulated[16:80,0]})
                 test=np.fft.fft(modulated[16:80,0])/64
-                print(test[range(-32,32)])
+                self.print_log({'type':'D', 'msg':test[range(-32,32)]})
                 rmsmodulated=np.std(modulated)
                 PLPCscaled=self.PLPCseq/np.std(self.PLPCseq)*rmsmodulated
                 #Concatenate withsample overlap after the preamble
 
                 a=np.r_['0',PLPCscaled, np.zeros((modulated.shape[0]-1,1))] 
-                print(a.shape)
-                print(PLPCscaled.shape)
+                self.print_log({'type':'D', 'msg':a.shape})
+                self.print_log({'type':'D', 'msg':PLPCscaled.shape})
                 b=np.r_['0', np.zeros((PLPCscaled.shape[0]-1,1)), modulated]
                 b=np.r_['0', np.zeros((PLPCscaled.shape[0]-1,1)), modulated]
-                print(b.shape)
+                self.print_log({'type':'D', 'msg':b.shape})
                 modulated=a+b
                 
                 #Replicate the user data to all antennas
@@ -193,19 +191,19 @@ class signal_generator_802_11n(thesdk):
                     usersig[i,:,:]=np.transpose(np.ones((self.Txantennas,1))@modulated.T)
             self._Z.Value=usersig 
             self._qam_reference=qamsignal
-            print("Test")
-            print(frame[0,:])
-            print(modulated[320+16:320+80,0])
-            print("fft")
+            self.print_log({'type':'D', 'msg':"Test"})
+            self.print_log({'type':'D', 'msg':frame[0,:]})
+            self.print_log({'type':'D', 'msg':modulated[320+16:320+80,0]})
+            self.print_log({'type':'D', 'msg':"fft"})
             test=np.fft.fft(modulated[320+16:320+80,0],axis=0)/64
-            print(test[Freqmap])
-            print("Usersig")
-            print(self._Z.Value[0,320+16:320+80,0])
+            self.print_log({'type':'D', 'msg':test[Freqmap]})
+            self.print_log({'type':'D', 'msg':"Usersig"})
+            self.print_log({'type':'D', 'msg':self._Z.Value[0,320+16:320+80,0]})
             test=self._Z.Value[0,320+16:320+80,0]
             test.shape=(-1,1)
-            print(test.shape)
+            self.print_log({'type':'D', 'msg':test.shape})
             test=np.fft.fft(test,axis=0)/64
-            print(test[Freqmap])
+            self.print_log({'type':'D', 'msg':test[Freqmap]})
 
             return usersig
           
@@ -239,7 +237,7 @@ class signal_generator_802_11n(thesdk):
                 dataframe=frame[:,ofdmdict['data_loc']+32]   #Set the data
                 pilotframe=frame[:,ofdmdict['pilot_loc']+32] #In this case, also pilot carry bits
                 if (mr.factor({'n':self.Rs/BBRs}))[0] != 2:
-                    print("SHIT ALERT: %s: The first interpolation factor for 802.11n is more than 2 \n and I'am too lazy to implement dedicated filter mask" %(self.__class__.__name__))
+                    self.print_log({'type':'E', 'msg':"SHIT ALERT: %s: The first interpolation factor for 802.11n is more than 2 \n and I'am too lazy to implement dedicated filter mask" %(self.__class__.__name__)})
                     quit()
 
                 interpolated=mdm.ofdmMod(ofdmdict,dataframe,pilotframe) #Variable for interpolation
@@ -253,11 +251,11 @@ class signal_generator_802_11n(thesdk):
 
                 #Initialize chaining of the symbols
                 chained=np.array(interpolated[0,:],ndmin=2)
-                #print(chained.shape)
+                #self.print_log({'type':'D', 'msg':chained.shape})
 
                 #Loop through all symbols on rows
                 for k in range(1,interpolated.shape[0]):
-                    #print(np.zeros((int(length-overlap))))
+                    #self.print_log({'type':'D', 'msg':np.zeros((int(length-overlap)))})
                     a=np.r_['1', chained, np.zeros((1,int(length-overlap)))]
                     b=np.r_['1',np.zeros((1,int(chained.shape[1]-overlap))), np.reshape(interpolated[k,:],(1,-1)) ]
                     a.shape=(1,-1)
@@ -289,33 +287,33 @@ class signal_generator_802_11n(thesdk):
         self.PLPCseq_shortwin=seq_short_extended[0,0:161]*win
         self.PLPCseq_short.shape=(-1,1)
         self.PLPCseq_shortwin.shape=(-1,1)
-        #print(np.fft.fft(seq_short,axis=0))
+        #self.print_log({'type':'D', 'msg':np.fft.fft(seq_short,axis=0)})
 
         ##Generate long sequence
         #shift the fregs by TGI
 
-        print(PLPCsyn_long[Freqmap])
+        self.print_log({'type':'D', 'msg':PLPCsyn_long[Freqmap]})
         seq_long=np.fft.ifft(PLPCsyn_long[Freqmap],axis=0)
-        print("seq_long")
-        print(seq_long)
-        print("fft seq_long")
+        self.print_log({'type':'D', 'msg':"seq_long"})
+        self.print_log({'type':'D', 'msg':seq_long})
+        self.print_log({'type':'D', 'msg':"fft seq_long"})
         test=np.fft.fft(seq_long,axis=0)
-        print(test[Freqmap])
+        self.print_log({'type':'D', 'msg':test[Freqmap]})
 
         seq_long_extended=np.array([], ndmin=2,dtype='complex')
-        #print(seq_long)
+        #self.print_log({'type':'D', 'msg':seq_long})
         for i in range(4):
             seq_long_extended=np.r_['1', seq_long_extended, seq_long.T]
 
-        print(TGI2)
+        self.print_log({'type':'D', 'msg':TGI2})
         seq_long_extended=np.r_['1', seq_long[-TGI2::].T, seq_long_extended]
         self.PLPCseq_long=seq_long_extended[0,0:161]
         msg="Long sequence is \n %s" %(self.PLPCseq_long)
-        print("long test fft")
+        self.print_log({'type':'D', 'msg': msg}) 
+        self.print_log({'type':'D', 'msg':"long test fft"})
         test=np.fft.fft(self.PLPCseq_long[TGI2:TGI2+64])
-        print(test[Freqmap])
+        self.print_log({'type':'D', 'msg':test[Freqmap]})
         
-        self.print_log({'type':'I', 'msg': msg}) 
         self.PLPCseq_longwin=seq_long_extended[0,0:161]*win
         self.PLPCseq_long.shape=(-1,1)
         self.PLPCseq_longwin.shape=(-1,1)
@@ -323,10 +321,10 @@ class signal_generator_802_11n(thesdk):
         a=np.r_['0',self.PLPCseq_shortwin, np.zeros((self.PLPCseq_longwin.shape[0]-1,1))] 
         b=np.r_['0', np.zeros((self.PLPCseq_shortwin.shape[0]-1,1)), self.PLPCseq_longwin]
         self.PLPCseq=a+b 
-        print("long test fft 2")
+        self.print_log({'type':'D', 'msg':"long test fft 2"})
         test=np.fft.fft(self.PLPCseq[160+TGI2:160+TGI2+64],axis=0)
-        print(test[Freqmap])
-        #print(self.PLPCseq.shape)
+        self.print_log({'type':'D', 'msg':test[Freqmap]})
+        #self.print_log({'type':'D', 'msg':self.PLPCseq.shape})
  
     def gen_plcp_header_field(self):
         pass
@@ -355,7 +353,7 @@ class signal_generator_802_11n(thesdk):
                 signali[symbol,:]=t
         msg="Signal length is now %i" %(signal.shape[1])
         self.print_log({'type':'I', 'msg': msg}) 
-        #print(filterlist)
+        #self.print_log({'type':'D', 'msg':filterlist})
         return signali
 
 
@@ -405,5 +403,5 @@ if __name__=="__main__":
     t=signal_generator_802_11n()
     t.gen_plpc_preamble_field()
     t.gen_random_802_11n_ofdm()
-    print(t._Z.Value.shape)
+    self.print_log({'type':'D', 'msg':t._Z.Value.shape})
 
