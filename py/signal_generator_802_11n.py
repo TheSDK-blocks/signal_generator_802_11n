@@ -1,5 +1,5 @@
 # signal_generator_802_11n class 
-# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 16.11.2017 14:59
+# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 16.11.2017 16:51
 import sys
 sys.path.append ('/home/projects/fader/TheSDK/Entities/refptr/py')
 sys.path.append ('/home/projects/fader/TheSDK/Entities/thesdk/py')
@@ -130,7 +130,8 @@ class signal_generator_802_11n(thesdk):
             framelen=ofdmdict['framelen']
             length=bbsigdict['length']
             CPlen=ofdmdict['CPlen']
-            QAM=bbsigdict['QAM']
+            #QAM=bbsigdict['QAM']
+            QAM=4
             BBRs=bbsigdict['BBRs']
             data_and_pilot_loc=np.sort(np.r_[ofdmdict['data_loc'],ofdmdict['pilot_loc']])
             #The length is approx this many frames
@@ -140,6 +141,7 @@ class signal_generator_802_11n(thesdk):
             #Generate random bitstreams per user
             #bitstream(user,time,antenna)
             bitstream=np.random.randint(2,size=(self.Users,int(frames*bitspersymbol*len(data_and_pilot_loc))))
+            #bitstream=np.ones((self.Users,int(frames*bitspersymbol*len(data_and_pilot_loc)))).astype('int')
 
             #Init the qam signal, frame and out
             #qamsignal is different for the users, but initially identical for the TXantennas 
