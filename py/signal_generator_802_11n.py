@@ -1,5 +1,5 @@
 # signal_generator_802_11n class 
-# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 20.11.2017 14:54
+# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 20.11.2017 15:10
 import sys
 sys.path.append ('/home/projects/fader/TheSDK/Entities/refptr/py')
 sys.path.append ('/home/projects/fader/TheSDK/Entities/thesdk/py')
@@ -162,8 +162,8 @@ class signal_generator_802_11n(thesdk):
                 self.print_log({'type':'D', 'msg':modulated[0,16:80]})
                 test=np.fft.fft(modulated[0,16:80])/64
                 self.print_log({'type':'D', 'msg':test[range(-32,32)]})
-                #Windowing breaks the EVM!!!!
-                #modulated=np.multiply(modulated,win)
+                #Windowing is OK if you sync in the middle of the cyclic prefix 
+                modulated=np.multiply(modulated,win)
                 self.print_log({'type':'D', 'msg':modulated[0,16:80]})
                 test=np.fft.fft(modulated[0,16:80])/64
                 self.print_log({'type':'D', 'msg':test[range(-32,32)]})
