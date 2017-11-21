@@ -1,5 +1,5 @@
 # signal_generator_802_11n class 
-# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 20.11.2017 15:10
+# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 20.11.2017 17:05
 import sys
 sys.path.append ('/home/projects/fader/TheSDK/Entities/refptr/py')
 sys.path.append ('/home/projects/fader/TheSDK/Entities/thesdk/py')
@@ -190,6 +190,7 @@ class signal_generator_802_11n(thesdk):
                 else:
                     usersig[i,:,:]=np.transpose(np.ones((self.Txantennas,1))@modulated.T)
             self._Z.Value=usersig 
+            self._bitstream_reference=bitstream
             self._qam_reference=qamsignal
             self.print_log({'type':'D', 'msg':"Test"})
             self.print_log({'type':'D', 'msg':frame[0,:]})
