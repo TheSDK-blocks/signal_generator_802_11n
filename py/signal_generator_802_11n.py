@@ -1,5 +1,5 @@
 # signal_generator_802_11n class 
-# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 20.11.2017 17:05
+# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 22.11.2017 18:09
 import sys
 sys.path.append ('/home/projects/fader/TheSDK/Entities/refptr/py')
 sys.path.append ('/home/projects/fader/TheSDK/Entities/thesdk/py')
@@ -56,6 +56,7 @@ class signal_generator_802_11n(thesdk):
         self.bbsigdict=bbsigdict_802_11n_random_QAM16_OFDM
         self.Rs = self.bbsigdict['BBRs']         # Default system sampling frequency
         self.Users=2
+        self.Disableuser= [ False, True]
         self.Txantennas=4
         self.iptr_A = refptr();
         self.model='py';                         #can be set externally, but is not propagated
@@ -138,14 +139,12 @@ class signal_generator_802_11n(thesdk):
             
             #Generate random bitstreams per user
             #bitstream(user,time,antenna)
+            #Every user requires at least 4 symbols for channel estimation 
+            #bitstream=np.r_['1', np.zeros((self.Users,4*(self.Users-1)*bitspersymbol*len(data_and_pilot_loc)),dtype=np.int8),np.random.randint(2,size=(self.Users,int(frames*bitspersymbol*len(data_and_pilot_loc))))]
             bitstream=np.random.randint(2,size=(self.Users,int(frames*bitspersymbol*len(data_and_pilot_loc))))
-            #bitstream=np.ones((self.Users,int(frames*bitspersymbol*len(data_and_pilot_loc)))).astype('int')
-
             #Init the qam signal, frame and out
-            #qamsignal is different for the users, but initially identical for the TXantennas 
-            qamsignal=np.zeros((self.Users,int(frames*len(data_and_pilot_loc))),dtype='complex')
+            qamsignal=np.zeros((self.Users,int((frames)*len(data_and_pilot_loc))),dtype='complex')
             frame=np.zeros((int(frames),int(framelen)),dtype='complex')
-
             #for i in range(self.Txantennas):
             for i in range(self.Users):
                 wordstream, qamsignal[i]= mdm.qamModulateBitStream(bitstream[i], QAM) #Modulated signal per user
@@ -159,30 +158,23 @@ class signal_generator_802_11n(thesdk):
                 win=np.ones_like(modulated)
                 win[:,0]=0.5
                 win[:,-1]=0.5
-                self.print_log({'type':'D', 'msg':modulated[0,16:80]})
-                test=np.fft.fft(modulated[0,16:80])/64
-                self.print_log({'type':'D', 'msg':test[range(-32,32)]})
                 #Windowing is OK if you sync in the middle of the cyclic prefix 
                 modulated=np.multiply(modulated,win)
-                self.print_log({'type':'D', 'msg':modulated[0,16:80]})
-                test=np.fft.fft(modulated[0,16:80])/64
-                self.print_log({'type':'D', 'msg':test[range(-32,32)]})
                 modulated=modulated.reshape(-1,1)
-                self.print_log({'type':'D', 'msg':modulated[16:80,0]})
-                test=np.fft.fft(modulated[16:80,0])/64
-                self.print_log({'type':'D', 'msg':test[range(-32,32)]})
                 rmsmodulated=np.std(modulated)
                 PLPCscaled=self.PLPCseq/np.std(self.PLPCseq)*rmsmodulated
-                #Concatenate withsample overlap after the preamble
+                if self.Disableuser[i]:
+                    modulated=np.zeros_like(modulated)
 
-                a=np.r_['0',PLPCscaled, np.zeros((modulated.shape[0]-1,1))] 
+                #Concatenate with sample overlap after the preamble
+                # Skew symbols for TDD channel estimation
+                a=np.r_['0',np.zeros((4*i*(framelen+CPlen),1)),PLPCscaled, np.zeros((4*(self.Users-1-i)*(framelen+CPlen),1)), np.zeros((modulated.shape[0]-1,1))] 
                 self.print_log({'type':'D', 'msg':a.shape})
                 self.print_log({'type':'D', 'msg':PLPCscaled.shape})
-                b=np.r_['0', np.zeros((PLPCscaled.shape[0]-1,1)), modulated]
-                b=np.r_['0', np.zeros((PLPCscaled.shape[0]-1,1)), modulated]
+                b=np.r_['0',np.zeros((4*i*(framelen+CPlen),1)), np.zeros((PLPCscaled.shape[0]-1,1)), np.zeros((4*(self.Users-1-i)*(framelen+CPlen),1)), modulated]
                 self.print_log({'type':'D', 'msg':b.shape})
                 modulated=a+b
-                
+
                 #Replicate the user data to all antennas
                 if i==0:
                     usersig=np.zeros((self.Users, modulated.shape[0], self.Txantennas),dtype='complex')
@@ -192,20 +184,6 @@ class signal_generator_802_11n(thesdk):
             self._Z.Value=usersig 
             self._bitstream_reference=bitstream
             self._qam_reference=qamsignal
-            self.print_log({'type':'D', 'msg':"Test"})
-            self.print_log({'type':'D', 'msg':frame[0,:]})
-            self.print_log({'type':'D', 'msg':modulated[320+16:320+80,0]})
-            self.print_log({'type':'D', 'msg':"fft"})
-            test=np.fft.fft(modulated[320+16:320+80,0],axis=0)/64
-            self.print_log({'type':'D', 'msg':test[Freqmap]})
-            self.print_log({'type':'D', 'msg':"Usersig"})
-            self.print_log({'type':'D', 'msg':self._Z.Value[0,320+16:320+80,0]})
-            test=self._Z.Value[0,320+16:320+80,0]
-            test.shape=(-1,1)
-            self.print_log({'type':'D', 'msg':test.shape})
-            test=np.fft.fft(test,axis=0)/64
-            self.print_log({'type':'D', 'msg':test[Freqmap]})
-
             return usersig
           
     def ofdm_random_qam(self):
@@ -356,8 +334,6 @@ class signal_generator_802_11n(thesdk):
         self.print_log({'type':'I', 'msg': msg}) 
         #self.print_log({'type':'D', 'msg':filterlist})
         return signali
-
-
 
 #Window to taper OFDM symbols
 def window(argdict={'Tr':100e-9, 'length':478, 'fs':80e6, 'duration':240 }):
