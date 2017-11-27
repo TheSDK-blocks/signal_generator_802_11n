@@ -1,5 +1,5 @@
 # signal_generator_802_11n class 
-# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 22.11.2017 18:09
+# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 27.11.2017 15:04
 import sys
 sys.path.append ('/home/projects/fader/TheSDK/Entities/refptr/py')
 sys.path.append ('/home/projects/fader/TheSDK/Entities/thesdk/py')
@@ -56,7 +56,7 @@ class signal_generator_802_11n(thesdk):
         self.bbsigdict=bbsigdict_802_11n_random_QAM16_OFDM
         self.Rs = self.bbsigdict['BBRs']         # Default system sampling frequency
         self.Users=2
-        self.Disableuser= [ False, True]
+        self.Disableuser= [ False, True]         #Disable data transmission for cerrtain users
         self.Txantennas=4
         self.iptr_A = refptr();
         self.model='py';                         #can be set externally, but is not propagated
@@ -64,10 +64,11 @@ class signal_generator_802_11n(thesdk):
         self._qam_reference =[]                 #Variable for theoriginal user payoad data
         self._classfile=__file__
         self.DEBUG= False
-        self.PLPCseq_short=np.array([1],ndmin=2)
-        self.PLPCseq_long=np.array([1],ndmin=2)
-        self.PLPCseq_shortwin=np.array([1],ndmin=2)
-        self.PLPCseq_longwin=np.array([1],ndmin=2)
+        self._PLPCseq_short=np.array([1],ndmin=2)
+        self._PLPCseq_long=np.array([1],ndmin=2)
+        self._PLPCseq_shortwin=np.array([1],ndmin=2)
+        self._PLPCseq_longwin=np.array([1],ndmin=2)
+        self._PLPCseq=np.array([1],ndmin=2)
         self.gen_plpc_preamble_field()
 
         if len(arg)>=1:
@@ -162,7 +163,7 @@ class signal_generator_802_11n(thesdk):
                 modulated=np.multiply(modulated,win)
                 modulated=modulated.reshape(-1,1)
                 rmsmodulated=np.std(modulated)
-                PLPCscaled=self.PLPCseq/np.std(self.PLPCseq)*rmsmodulated
+                PLPCscaled=self._PLPCseq/np.std(self._PLPCseq)*rmsmodulated
                 if self.Disableuser[i]:
                     modulated=np.zeros_like(modulated)
 
@@ -171,9 +172,10 @@ class signal_generator_802_11n(thesdk):
                 a=np.r_['0',np.zeros((4*i*(framelen+CPlen),1)),PLPCscaled, np.zeros((4*(self.Users-1-i)*(framelen+CPlen),1)), np.zeros((modulated.shape[0]-1,1))] 
                 self.print_log({'type':'D', 'msg':a.shape})
                 self.print_log({'type':'D', 'msg':PLPCscaled.shape})
+                self.print_log({'type':'D', 'msg':self._PLPCseq.shape})
                 b=np.r_['0',np.zeros((4*i*(framelen+CPlen),1)), np.zeros((PLPCscaled.shape[0]-1,1)), np.zeros((4*(self.Users-1-i)*(framelen+CPlen),1)), modulated]
                 self.print_log({'type':'D', 'msg':b.shape})
-                modulated=a+b
+                modulated=(a+b)
 
                 #Replicate the user data to all antennas
                 if i==0:
@@ -262,10 +264,10 @@ class signal_generator_802_11n(thesdk):
 
         ##windowing
         win=np.r_[0.5, np.ones((159)), 0.5]
-        self.PLPCseq_short=seq_short_extended[0,0:161]
-        self.PLPCseq_shortwin=seq_short_extended[0,0:161]*win
-        self.PLPCseq_short.shape=(-1,1)
-        self.PLPCseq_shortwin.shape=(-1,1)
+        self._PLPCseq_short=seq_short_extended[0,0:161]
+        self._PLPCseq_shortwin=seq_short_extended[0,0:161]*win
+        self._PLPCseq_short.shape=(-1,1)
+        self._PLPCseq_shortwin.shape=(-1,1)
         #self.print_log({'type':'D', 'msg':np.fft.fft(seq_short,axis=0)})
 
         ##Generate long sequence
@@ -286,24 +288,24 @@ class signal_generator_802_11n(thesdk):
 
         self.print_log({'type':'D', 'msg':TGI2})
         seq_long_extended=np.r_['1', seq_long[-TGI2::].T, seq_long_extended]
-        self.PLPCseq_long=seq_long_extended[0,0:161]
-        msg="Long sequence is \n %s" %(self.PLPCseq_long)
+        self._PLPCseq_long=seq_long_extended[0,0:161]
+        msg="Long sequence is \n %s" %(self._PLPCseq_long)
         self.print_log({'type':'D', 'msg': msg}) 
         self.print_log({'type':'D', 'msg':"long test fft"})
-        test=np.fft.fft(self.PLPCseq_long[TGI2:TGI2+64])
+        test=np.fft.fft(self._PLPCseq_long[TGI2:TGI2+64])
         self.print_log({'type':'D', 'msg':test[Freqmap]})
         
-        self.PLPCseq_longwin=seq_long_extended[0,0:161]*win
-        self.PLPCseq_long.shape=(-1,1)
-        self.PLPCseq_longwin.shape=(-1,1)
+        self._PLPCseq_longwin=seq_long_extended[0,0:161]*win
+        self._PLPCseq_long.shape=(-1,1)
+        self._PLPCseq_longwin.shape=(-1,1)
 
-        a=np.r_['0',self.PLPCseq_shortwin, np.zeros((self.PLPCseq_longwin.shape[0]-1,1))] 
-        b=np.r_['0', np.zeros((self.PLPCseq_shortwin.shape[0]-1,1)), self.PLPCseq_longwin]
-        self.PLPCseq=a+b 
+        a=np.r_['0',self._PLPCseq_shortwin, np.zeros((self._PLPCseq_longwin.shape[0]-1,1))] 
+        b=np.r_['0', np.zeros((self._PLPCseq_shortwin.shape[0]-1,1)), self._PLPCseq_longwin]
+        self._PLPCseq=a+b 
         self.print_log({'type':'D', 'msg':"long test fft 2"})
-        test=np.fft.fft(self.PLPCseq[160+TGI2:160+TGI2+64],axis=0)
+        test=np.fft.fft(self._PLPCseq[160+TGI2:160+TGI2+64],axis=0)
         self.print_log({'type':'D', 'msg':test[Freqmap]})
-        #self.print_log({'type':'D', 'msg':self.PLPCseq.shape})
+        #self.print_log({'type':'D', 'msg':self._PLPCseq.shape})
  
     def gen_plcp_header_field(self):
         pass
