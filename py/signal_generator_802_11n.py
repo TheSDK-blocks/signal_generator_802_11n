@@ -1,5 +1,5 @@
 # signal_generator_802_11n class 
-# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 27.11.2017 15:04
+# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 28.11.2017 14:44
 import sys
 sys.path.append ('/home/projects/fader/TheSDK/Entities/refptr/py')
 sys.path.append ('/home/projects/fader/TheSDK/Entities/thesdk/py')
@@ -56,7 +56,7 @@ class signal_generator_802_11n(thesdk):
         self.bbsigdict=bbsigdict_802_11n_random_QAM16_OFDM
         self.Rs = self.bbsigdict['BBRs']         # Default system sampling frequency
         self.Users=2
-        self.Disableuser= [ False, True]         #Disable data transmission for cerrtain users
+        self.Disableuser= [ False, False]         #Disable data transmission for cerrtain users
         self.Txantennas=4
         self.iptr_A = refptr();
         self.model='py';                         #can be set externally, but is not propagated
@@ -166,6 +166,8 @@ class signal_generator_802_11n(thesdk):
                 PLPCscaled=self._PLPCseq/np.std(self._PLPCseq)*rmsmodulated
                 if self.Disableuser[i]:
                     modulated=np.zeros_like(modulated)
+
+                self.print_log({'type':'D', 'msg': "modulaed is %s" %(modulated)})
 
                 #Concatenate with sample overlap after the preamble
                 # Skew symbols for TDD channel estimation
