@@ -1,5 +1,5 @@
 # signal_generator_802_11n class 
-# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 28.11.2017 20:02
+# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 29.11.2017 09:39
 import sys
 sys.path.append ('/home/projects/fader/TheSDK/Entities/refptr/py')
 sys.path.append ('/home/projects/fader/TheSDK/Entities/thesdk/py')
@@ -51,12 +51,13 @@ class signal_generator_802_11n(thesdk):
 
     #802.11 OFDM Dictionaries define the structure of the OFDM frames
     def __init__(self,*arg): 
-        self.proplist = [ 'Rs', 'bbsigdict', 'Txantennas', 'Users'];    #properties that can be propagated from parent
+        self.proplist = [ 'Rs', 'bbsigdict', 'Txantennas', 'Users' , 'Disableuser'];    #properties that can be propagated from parent
         self.ofdmdict =ofdm64dict_withguardband
         self.bbsigdict=bbsigdict_802_11n_random_QAM16_OFDM
         self.Rs = self.bbsigdict['BBRs']         # Default system sampling frequency
         self.Users=2
-        self.Disableuser= [ False, False]         #Disable data transmission for cerrtain users
+        self.Disableuser=[]
+        self.Disableuser= [ self.Disableuser.append(False) for i in range(self.Users) ]         #Disable data transmission for cerrtain users
         self.Txantennas=4
         self.iptr_A = refptr();
         self.model='py';                         #can be set externally, but is not propagated
