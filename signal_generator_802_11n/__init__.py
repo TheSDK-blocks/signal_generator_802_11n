@@ -59,9 +59,8 @@ class signal_generator_802_11n(thesdk):
         self.Disableuser=[]
         self.Disableuser= [ self.Disableuser.append(False) for i in range(self.Users) ]         #Disable data transmission for cerrtain users
         self.Txantennas=4
-        self.iptr_A = refptr();
         self.model='py';                         #can be set externally, but is not propagated
-        self._Z = refptr();
+        self._Z = IO();
         self._qam_reference =[]                 #Variable for theoriginal user payoad data
         self._classfile=__file__
         self.DEBUG= False
@@ -84,7 +83,7 @@ class signal_generator_802_11n(thesdk):
         bbsigdict=self.bbsigdict
         framelen=ofdmdict['framelen']
         length=bbsigdict['length']
-        frames=np.floor(length/framelen)
+        frames=int(np.floor(length/framelen))
 
         CPlen=ofdmdict['CPlen']
         #QAM=bbsigdict['QAM']
@@ -107,23 +106,22 @@ class signal_generator_802_11n(thesdk):
         overlap=(length-duration) #Now this is even, but necessarily. Handle later
         win=window({'Tr':100e-9, 'length':length, 'fs':self.Rs, 'duration': duration})
         interpolated=interpolated*win
-        chained=interpolated[0,:]
-        for k in range(1,interpolated.shape[0]):
-            a=np.r_[chained, np.zeros((int(length-overlap)))]
-            b=np.r_[np.zeros((int(chained.shape[0]-overlap))), interpolated[k,:] ]
-            a.shape=(1,-1)
-            b.shape=(1,-1)
-            chained=np.sum(np.r_['0',a,b],axis=0)
+        for k in range(interpolated.shape[0]):
+            if k==0:
+                chained=interpolated[0,:].reshape(1,-1)
+            else:
+                a=np.r_['1',chained, np.zeros((1,int(length-overlap)))]
+                b=np.r_['1', np.zeros((1,int(chained.shape[1]-overlap))), interpolated[k,:].reshape(1,-1) ]
+                chained=np.sum(np.r_['0',a,b],axis=0).reshape(1,-1)
 
-        chained.shape=(1,-1)
-        usersig=np.ones((self.Txantennas,1))*chained.T
+        usersig=np.ones((self.Txantennas,1))@chained
         
         out=np.zeros((self.Users,usersig.shape[0],usersig.shape[1]),dtype='complex')
         for i in range(self.Users):
             out[i,:,:]=usersig
 
-        self._Z.Value=out 
-        self._qam_reference=ones((self.Users,1))@frame.reshape((1,-1))
+        self._Z.Data=out 
+        self._qam_reference=np.ones((self.Users,1))@frame.reshape((1,-1))
 
     def gen_random_802_11n_ofdm(self):
             #Local vars just to clear to code
@@ -168,16 +166,16 @@ class signal_generator_802_11n(thesdk):
                 if self.Disableuser[i]:
                     modulated=np.zeros_like(modulated)
 
-                self.print_log({'type':'D', 'msg': "modulaed is %s" %(modulated)})
+                self.print_log(type='D', msg= "Modulated is %s" %(modulated))
 
                 #Concatenate with sample overlap after the preamble
                 # Skew symbols for TDD channel estimation
                 a=np.r_['0',np.zeros((4*i*(framelen+CPlen),1)),PLPCscaled, np.zeros((4*(self.Users-1-i)*(framelen+CPlen),1)), np.zeros((modulated.shape[0]-1,1))] 
-                self.print_log({'type':'D', 'msg':a.shape})
-                self.print_log({'type':'D', 'msg':PLPCscaled.shape})
-                self.print_log({'type':'D', 'msg':self._PLPCseq.shape})
+                self.print_log(type='D', msg=a.shape)
+                self.print_log(type='D', msg=PLPCscaled.shape)
+                self.print_log(type='D', msg=self._PLPCseq.shape)
                 b=np.r_['0',np.zeros((4*i*(framelen+CPlen),1)), np.zeros((PLPCscaled.shape[0]-1,1)), np.zeros((4*(self.Users-1-i)*(framelen+CPlen),1)), modulated]
-                self.print_log({'type':'D', 'msg':b.shape})
+                self.print_log(type='D', msg=b.shape)
                 modulated=(a+b)
 
                 #Replicate the user data to all antennas
@@ -186,7 +184,7 @@ class signal_generator_802_11n(thesdk):
                     usersig[i,:,:]=np.transpose(np.ones((self.Txantennas,1))@modulated.T)
                 else:
                     usersig[i,:,:]=np.transpose(np.ones((self.Txantennas,1))@modulated.T)
-            self._Z.Value=usersig 
+            self._Z.Data=usersig 
             self._bitstream_reference=bitstream
             self._qam_reference=qamsignal
             return usersig
@@ -221,7 +219,7 @@ class signal_generator_802_11n(thesdk):
                 dataframe=frame[:,ofdmdict['data_loc']+32]   #Set the data
                 pilotframe=frame[:,ofdmdict['pilot_loc']+32] #In this case, also pilot carry bits
                 if (mr.factor({'n':self.Rs/BBRs}))[0] != 2:
-                    self.print_log({'type':'E', 'msg':"SHIT ALERT: %s: The first interpolation factor for 802.11n is more than 2 \n and I'am too lazy to implement dedicated filter mask" %(self.__class__.__name__)})
+                    self.print_log(type='E', msg="SHIT ALERT: %s: The first interpolation factor for 802.11n is more than 2 \n and I'am too lazy to implement dedicated filter mask" %(self.__class__.__name__))
                     quit()
 
                 interpolated=mdm.ofdmMod(ofdmdict,dataframe,pilotframe) #Variable for interpolation
@@ -235,11 +233,11 @@ class signal_generator_802_11n(thesdk):
 
                 #Initialize chaining of the symbols
                 chained=np.array(interpolated[0,:],ndmin=2)
-                #self.print_log({'type':'D', 'msg':chained.shape})
+                #self.print_log(type='D', msg=chained.shape)
 
                 #Loop through all symbols on rows
                 for k in range(1,interpolated.shape[0]):
-                    #self.print_log({'type':'D', 'msg':np.zeros((int(length-overlap)))})
+                    #self.print_log(type='D', msg=np.zeros((int(length-overlap))))
                     a=np.r_['1', chained, np.zeros((1,int(length-overlap)))]
                     b=np.r_['1',np.zeros((1,int(chained.shape[1]-overlap))), np.reshape(interpolated[k,:],(1,-1)) ]
                     a.shape=(1,-1)
@@ -253,7 +251,7 @@ class signal_generator_802_11n(thesdk):
                     usersig[i,:,:]=np.transpose(np.ones((self.Txantennas,1))@chained)
                 else:
                     usersig[i,:,:]=np.transpose(np.ones((self.Txantennas,1))@chained)
-            self._Z.Value=usersig 
+            self._Z.Data=usersig 
             self._qam_reference=qamsignal
             return usersig
     
@@ -271,32 +269,32 @@ class signal_generator_802_11n(thesdk):
         self._PLPCseq_shortwin=seq_short_extended[0,0:161]*win
         self._PLPCseq_short.shape=(-1,1)
         self._PLPCseq_shortwin.shape=(-1,1)
-        #self.print_log({'type':'D', 'msg':np.fft.fft(seq_short,axis=0)})
+        #self.print_log(type='D', msg=np.fft.fft(seq_short,axis=0))
 
         ##Generate long sequence
         #shift the fregs by TGI
 
-        self.print_log({'type':'D', 'msg':PLPCsyn_long[Freqmap]})
+        self.print_log(type='D', msg=PLPCsyn_long[Freqmap])
         seq_long=np.fft.ifft(PLPCsyn_long[Freqmap],axis=0)
-        self.print_log({'type':'D', 'msg':"seq_long"})
-        self.print_log({'type':'D', 'msg':seq_long})
-        self.print_log({'type':'D', 'msg':"fft seq_long"})
+        self.print_log(type='D', msg="seq_long")
+        self.print_log(type='D', msg=seq_long)
+        self.print_log(type='D', msg="fft seq_long")
         test=np.fft.fft(seq_long,axis=0)
-        self.print_log({'type':'D', 'msg':test[Freqmap]})
+        self.print_log(type='D', msg=test[Freqmap])
 
         seq_long_extended=np.array([], ndmin=2,dtype='complex')
-        #self.print_log({'type':'D', 'msg':seq_long})
+        #self.print_log(type='D', msg=seq_long)
         for i in range(4):
             seq_long_extended=np.r_['1', seq_long_extended, seq_long.T]
 
-        self.print_log({'type':'D', 'msg':TGI2})
+        self.print_log(type='D', msg=TGI2)
         seq_long_extended=np.r_['1', seq_long[-TGI2::].T, seq_long_extended]
         self._PLPCseq_long=seq_long_extended[0,0:161]
         msg="Long sequence is \n %s" %(self._PLPCseq_long)
-        self.print_log({'type':'D', 'msg': msg}) 
-        self.print_log({'type':'D', 'msg':"long test fft"})
+        self.print_log(type='D', msg= msg) 
+        self.print_log(type='D', msg="long test fft")
         test=np.fft.fft(self._PLPCseq_long[TGI2:TGI2+64])
-        self.print_log({'type':'D', 'msg':test[Freqmap]})
+        self.print_log(type='D', msg=test[Freqmap])
         
         self._PLPCseq_longwin=seq_long_extended[0,0:161]*win
         self._PLPCseq_long.shape=(-1,1)
@@ -305,10 +303,10 @@ class signal_generator_802_11n(thesdk):
         a=np.r_['0',self._PLPCseq_shortwin, np.zeros((self._PLPCseq_longwin.shape[0]-1,1))] 
         b=np.r_['0', np.zeros((self._PLPCseq_shortwin.shape[0]-1,1)), self._PLPCseq_longwin]
         self._PLPCseq=a+b 
-        self.print_log({'type':'D', 'msg':"long test fft 2"})
+        self.print_log(type='D', msg="long test fft 2")
         test=np.fft.fft(self._PLPCseq[160+TGI2:160+TGI2+64],axis=0)
-        self.print_log({'type':'D', 'msg':test[Freqmap]})
-        #self.print_log({'type':'D', 'msg':self._PLPCseq.shape})
+        self.print_log(type='D', msg=test[Freqmap])
+        #self.print_log(type='D', msg=self._PLPCseq.shape)
  
     def gen_plcp_header_field(self):
         pass
@@ -320,7 +318,7 @@ class signal_generator_802_11n(thesdk):
         factors=mr.factor({'n':ratio})
         filterlist=mr.generate_interpolation_filterlist({'interp_factor':ratio})
         msg="Signal length is now %i" %(signal.shape[1])
-        self.print_log({'type':'I', 'msg': msg}) 
+        self.print_log(type='I', msg= msg) 
         #This is to enable growth of the signal length that better mimics the hardware
         #sig.resample_poly is more effective, but does not allow growth.
         for symbol in range(signal.shape[0]):
@@ -336,8 +334,8 @@ class signal_generator_802_11n(thesdk):
             else:
                 signali[symbol,:]=t
         msg="Signal length is now %i" %(signal.shape[1])
-        self.print_log({'type':'I', 'msg': msg}) 
-        #self.print_log({'type':'D', 'msg':filterlist})
+        self.print_log(type='I', msg= msg) 
+        #self.print_log(type='D', msg=filterlist)
         return signali
 
 #Window to taper OFDM symbols
@@ -362,28 +360,15 @@ def window(argdict={'Tr':100e-9, 'length':478, 'fs':80e6, 'duration':240 }):
          window[i]=np.sin(np.pi/2*(0.5-(t[i]-T)/Tr))**2
     return window
 
-#    def run(self,*arg):
-#        if len(arg)>0:
-#            par=True      #flag for parallel processing
-#            queue=arg[0]  #multiprocessing.Queue as the first argument
-#        else:
-#            par=False
-#
-#        if self.model=='py':
-#            out=np.array(self.iptr_A.Value)
-#            if par:
-#                queue.put(out)
-#            self._Z.Value=out
 
 
 if __name__=="__main__":
     import scipy as sci
     import numpy as np
     import matplotlib.pyplot as plt
-    from refptr import *
     from signal_generator_802_11n import *
     t=signal_generator_802_11n()
     t.gen_plpc_preamble_field()
     t.gen_random_802_11n_ofdm()
-    self.print_log({'type':'D', 'msg':t._Z.Value.shape})
+    self.print_log(type='D', msg=t._Z.Data.shape)
 
