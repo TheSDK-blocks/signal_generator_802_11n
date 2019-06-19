@@ -48,6 +48,9 @@ bbsigdict_randombitstream_QAM4_OFDM={ 'mode':'ofdm_random_qam', 'QAM':4, 'length
 bbsigdict_802_11n_random_QAM16_OFDM={ 'mode':'ofdm_random_802_11n', 'QAM':16, 'length':2**14, 'BBRs': 20e6 };
 
 class signal_generator_802_11n(thesdk):
+    @property
+    def _classfile(self):
+        return os.path.dirname(os.path.realpath(__file__)) + "/"+__name__
 
     #802.11 OFDM Dictionaries define the structure of the OFDM frames
     def __init__(self,*arg): 
@@ -62,7 +65,6 @@ class signal_generator_802_11n(thesdk):
         self.model='py';                         #can be set externally, but is not propagated
         self._Z = IO();
         self._qam_reference =[]                 #Variable for theoriginal user payoad data
-        self._classfile=__file__
         self.DEBUG= False
         self._PLPCseq_short=np.array([1],ndmin=2)
         self._PLPCseq_long=np.array([1],ndmin=2)
