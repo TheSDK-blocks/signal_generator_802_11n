@@ -1,18 +1,9 @@
 # signal_generator_802_11n class 
-# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 29.11.2017 09:39
+# Last modification by Marko Kosunen, marko.kosunen@aalto.fi, 20.06.2019 20:50
 import sys
-sys.path.append ('/home/projects/fader/TheSDK/Entities/refptr/py')
-sys.path.append ('/home/projects/fader/TheSDK/Entities/thesdk/py')
-sys.path.append ('/home/projects/fader/TheSDK/Entities/modem/py')
-sys.path.append ('/home/projects/fader/TheSDK/Entities/multirate/py')
 import numpy as np
 import scipy.signal as sig
-import tempfile
-import subprocess
-import shlex
-import time
 
-from refptr import *
 from thesdk import *
 
 import modem as mdm #Function definitions
